@@ -58,14 +58,11 @@ class PDFProcessor:
 
     def extract_text_with_positions(self, pdf_path: str) -> List[Dict[str, Any]]:
         """
-        Extract text from PDF and split into sentences with page/line info.
-        This matches the structure expected by the frontend.
+        Extract text from PDF and split into lines for practice.
         """
         self.sentences = []
         self.page_texts = []
         self.current_pdf_path = pdf_path
-        
-        import re
         
         with pdfplumber.open(pdf_path) as pdf:
             self.pages = len(pdf.pages)
@@ -73,16 +70,16 @@ class PDFProcessor:
                 text = page.extract_text() or ""
                 self.page_texts.append(text)
                 
-                # Simple sentence splitting
-                # In a real app, use nltk or spacy for better sentence segmentation
-                raw_sentences = re.split(r'(?<=[.!?])\s+', text)
+                # Split by lines as they appear in the PDF
+                raw_lines = text.split('\n')
                 
                 line_in_page = 1
-                for s_text in raw_sentences:
-                    s_text = s_text.strip()
-                    if len(s_text) > 5:  # Ignore very short fragments
+                for line_text in raw_lines:
+                    line_text = line_text.strip()
+                    # Keep any non-empty line
+                    if line_text:
                         self.sentences.append({
-                            'text': s_text,
+                            'text': line_text,
                             'page': page_num + 1,
                             'line': line_in_page,
                             'selected': False,

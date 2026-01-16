@@ -79,8 +79,10 @@ def upload_pdf_practice():
         pdf_file.seek(0)
         pdf_file.save(file_path)
 
-        pdf_file.seek(0)
-        sentences = extract_sentences_from_pdf(pdf_file)
+        # Use the central PDFProcessor for consistent line-by-line extraction
+        from models.pdf_processor import PDFProcessor
+        processor = PDFProcessor()
+        sentences = processor.extract_text_with_positions(file_path)
 
         if not sentences:
             return jsonify({
@@ -104,7 +106,32 @@ def upload_pdf_practice():
         return jsonify({'error': f'PDF processing failed: {str(e)}'}), 500
 
 
-# ---------- TTS SPEAK SENTENCE ----------
+# ---------- TTS AUDIO GENERATION ----------
+@practice_bp.route('/tts', methods=['POST'])
+def get_tts_audio():
+    data = request.json
+    text = data.get('text')
+    
+    if not text:
+        return jsonify({'error': 'No text provided'}), 400
+        
+    try:
+        from services.speech_service import SpeechService
+        speech_service = SpeechService()
+        
+        audio_bytes = speech_service.generate_tts_audio(text)
+        
+        if not audio_bytes:
+            return jsonify({'error': 'Failed to generate audio'}), 500
+            
+        return io.BytesIO(audio_bytes).read(), 200, {'Content-Type': 'audio/wav'}
+        
+    except Exception as e:
+        print(f"[ERROR] TTS error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+# ---------- TTS SPEAK SENTENCE (Direct Play) ----------
 @practice_bp.route('/speak-sentence', methods=['POST'])
 def speak_sentence():
     data = request.json
@@ -174,35 +201,53 @@ def serve_pdf(filename):
 @practice_bp.post("/evaluate-pronunciation")
 def evaluate_pronunciation():
     """
-    Evaluate spoken word pronunciation
-    Expects:
-      audio (File)
-      word  (Text)
+    Evaluate spoken word pronunciation with detailed feedback
     """
     try:
         audio_file = request.files.get("audio")
-        expected_word = request.form.get("word")
+        expected_text = request.form.get("word")  # 'word' field is used for historical reasons, but contains full sentence/line
 
-        if not audio_file or not expected_word:
+        if not audio_file or not expected_text:
             return jsonify({
                 "success": False,
-                "message": "audio and word are required"
+                "message": "audio and expected text are required"
             }), 400
 
         audio_bytes = audio_file.read()
-
-        result = pronunciation_model.evaluate(
+        
+        # 1. Use Wav2Vec2 for high-precision phoneme evaluation
+        w2v2_result = pronunciation_model.evaluate(
             audio_bytes=audio_bytes,
-            expected_word=expected_word
+            expected_word=expected_text
         )
-
+        
+        # 2. Use SpeechService for word-level alignment (missed/skipped words)
+        from services.speech_service import SpeechService
+        speech_service = SpeechService()
+        
+        # We need the transcription from SpeechService (which might use Google fallback)
+        # or we just use the w2v2 spoken_text
+        spoken_text = w2v2_result.get('spoken_text', '')
+        word_feedback = speech_service._get_word_level_feedback(expected_text, spoken_text)
+        
+        # Merge results
+        # Threshold: 0.55 is more forgiving for learning
+        is_correct = w2v2_result.get('score', 0) >= 0.55 or w2v2_result.get('status') in ['correct', 'almost']
+        
         return jsonify({
             "success": True,
-            "result": result
+            "is_correct": is_correct,
+            "score": w2v2_result.get('score'),
+            "feedback": w2v2_result.get('feedback'),
+            "word_feedback": word_feedback,
+            "spoken_text": w2v2_result.get('spoken_text'),
+            "result": w2v2_result 
         })
 
     except Exception as e:
         print("❌ Pronunciation evaluation error:", e)
+        import traceback
+        traceback.print_exc()
         return jsonify({
             "success": False,
             "error": str(e)

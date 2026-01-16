@@ -100,9 +100,10 @@ function ReadingAssistant() {
     try {
       const formData = new FormData();
       formData.append('audio', audioBlob);
-      formData.append('word', allSentences[currentSentenceIndex].text);
+      formData.append('word', allSentences[currentSentenceIndex].text); // The backend uses 'word' key for the full text
 
       const response = await axios.post('/api/practice/evaluate-pronunciation', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
         withCredentials: true
       });
 
@@ -121,6 +122,7 @@ function ReadingAssistant() {
           playSuccessSound();
           triggerConfetti();
           setStatus('Excellent! Moving to next sentence...');
+
           setTimeout(() => {
             setCurrentSentenceIndex(prev => prev + 1);
             setSessionStats(prev => ({
@@ -131,10 +133,13 @@ function ReadingAssistant() {
             setWordFeedback([]);
             setFeedback('');
           }, 2500);
+        } else {
+          setStatus('Practice complete. See feedback for improvements.');
         }
       }
     } catch (error) {
-      setStatus('Practice encounterd an error');
+      console.error("Practice error:", error);
+      setStatus('Practice encountered an error');
     } finally {
       setIsProcessing(false);
     }

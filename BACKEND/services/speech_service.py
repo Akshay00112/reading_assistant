@@ -6,6 +6,7 @@ import time
 import re
 import PyPDF2
 import io
+import uuid
 from config import Config
 import torch
 import numpy as np
@@ -362,6 +363,35 @@ class SpeechService:
             time.sleep(0.3)
         except Exception as e:
             print(f"TTS Error: {e}")
+
+    def generate_tts_audio(self, text):
+        """Generate TTS audio and return as bytes"""
+        if not text:
+            return None
+            
+        import tempfile
+        import os
+        
+        try:
+            temp_dir = tempfile.gettempdir()
+            filename = os.path.join(temp_dir, f"tts_{uuid.uuid4()}.wav")
+            
+            # Use a separate engine instance if possible to avoid state issues in multi-threaded env
+            # But pyttsx3 is often finicky with multiple instances.
+            self.engine.save_to_file(text, filename)
+            self.engine.runAndWait()
+            
+            with open(filename, 'rb') as f:
+                audio_data = f.read()
+                
+            # Cleanup
+            try: os.remove(filename)
+            except: pass
+            
+            return audio_data
+        except Exception as e:
+            print(f"[ERROR] TTS Generation failed: {e}")
+            return None
     
     def listen_once(self, calibrate_seconds=1.0):
         """Listen to microphone and return audio"""
@@ -437,41 +467,40 @@ class SpeechService:
         return re.sub(r'[^\w\s]', '', text.lower()).strip()
 
     def _get_word_level_feedback(self, original, spoken):
-        """Generate word-by-word feedback"""
+        """Generate word-by-word feedback with robust alignment"""
         if not original:
             return []
             
+        from difflib import SequenceMatcher
+        
         orig_words = original.split()
         spoken_words = spoken.lower().split() if spoken else []
         
-        feedback = []
-        spoken_ptr = 0
+        clean_orig = [self._clean_text(w) for w in orig_words]
+        clean_spoken = [self._clean_text(w) for w in spoken_words]
         
-        for orig_word in orig_words:
-            clean_orig = self._clean_text(orig_word)
-            found = False
+        matcher = SequenceMatcher(None, clean_orig, clean_spoken)
+        feedback = []
+        
+        for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+            if tag == 'equal':
+                for i in range(i1, i2):
+                    feedback.append({'word': orig_words[i], 'status': 'correct'})
+            elif tag == 'replace':
+                for i in range(i1, i2):
+                    # Check for mispronunciation
+                    spoken_idx = j1 + (i - i1)
+                    if spoken_idx < j2:
+                        sim = SequenceMatcher(None, clean_orig[i], clean_spoken[spoken_idx]).ratio()
+                        if sim > 0.6:
+                            feedback.append({'word': orig_words[i], 'status': 'mispronounced'})
+                        else:
+                            feedback.append({'word': orig_words[i], 'status': 'missed'})
+                    else:
+                        feedback.append({'word': orig_words[i], 'status': 'missed'})
+            elif tag == 'delete':
+                for i in range(i1, i2):
+                    feedback.append({'word': orig_words[i], 'status': 'missed'})
+            # 'insert' (extra spoken words) - we ignore for feedback on original text
             
-            # Look ahead a bit in spoken words to find the current original word
-            # This handles small omissions or extra words
-            for i in range(spoken_ptr, min(spoken_ptr + 3, len(spoken_words))):
-                if clean_orig == self._clean_text(spoken_words[i]):
-                    feedback.append({'word': orig_word, 'status': 'correct'})
-                    spoken_ptr = i + 1
-                    found = True
-                    break
-            
-            if not found:
-                # Check for mispronunciation (high similarity but not exact)
-                potential_match = False
-                for i in range(spoken_ptr, min(spoken_ptr + 2, len(spoken_words))):
-                    sim = SequenceMatcher(None, clean_orig, self._clean_text(spoken_words[i])).ratio()
-                    if sim > 0.7:
-                        feedback.append({'word': orig_word, 'status': 'mispronounced', 'spoken': spoken_words[i]})
-                        spoken_ptr = i + 1
-                        potential_match = True
-                        break
-                
-                if not potential_match:
-                    feedback.append({'word': orig_word, 'status': 'missed'})
-                    
         return feedback

@@ -33,16 +33,11 @@ const DocumentReader = ({
   const [selectedVoice, setSelectedVoice] = useState(null);
 
   // --- STATE ---
-  const [localSentences, setLocalSentences] = useState([]);
-  const [activeSentenceIndex, setActiveSentenceIndex] = useState(parentIndex || 0);
+  // --- STATE ---
   const [domItemsMap, setDomItemsMap] = useState([]); // Array of arrays: sentenceIdx -> element list
 
-  // Sync with parent index
-  useEffect(() => {
-    if (parentIndex !== undefined && parentIndex !== activeSentenceIndex) {
-      setActiveSentenceIndex(parentIndex);
-    }
-  }, [parentIndex]);
+  // Simplified: use currentIndex directly from props
+  const activeSentenceIndex = parentIndex || 0;
 
   // --- RECORDING STATE ---
   const [isRecording, setIsRecording] = useState(false);
@@ -115,8 +110,21 @@ const DocumentReader = ({
 
     // Get PCM data from mono (or first channel)
     const pcmData = audioBuffer.getChannelData(0);
-    const wavBuffer = encodeWav(pcmData, 16000);
 
+    // Check for silence (is the peak amplitude too low?)
+    let maxAmp = 0;
+    for (let i = 0; i < pcmData.length; i++) {
+      const absVal = Math.abs(pcmData[i]);
+      if (absVal > maxAmp) maxAmp = absVal;
+    }
+
+    console.log(`[AUDIO] Peak amplitude: ${maxAmp}`);
+    if (maxAmp < 0.01) {
+      console.warn("Audio seems very quiet or silent.");
+      // We still proceed, but the backend might fail.
+    }
+
+    const wavBuffer = encodeWav(pcmData, 16000);
     return new Blob([wavBuffer], { type: 'audio/wav' });
   };
 
@@ -174,11 +182,73 @@ const DocumentReader = ({
     }
   };
 
+  // --- STREAMING RECOGNITION (Web Speech API) ---
+  const recognitionRef = useRef(null);
+  const [liveSpokenWords, setLiveSpokenWords] = useState([]);
+
+  useEffect(() => {
+    if (window.webkitSpeechRecognition || window.SpeechRecognition) {
+      const SpeechRecognition = window.webkitSpeechRecognition || window.SpeechRecognition;
+      const rec = new SpeechRecognition();
+      rec.continuous = true;
+      rec.interimResults = true;
+      rec.lang = 'en-US';
+
+      rec.onresult = (event) => {
+        let transcript = "";
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          transcript += event.results[i][0].transcript;
+        }
+        const words = transcript.toLowerCase().replace(/[^\w\s]/g, '').split(/\s+/).filter(Boolean);
+        setLiveSpokenWords(words);
+      };
+
+      recognitionRef.current = rec;
+    }
+  }, []);
+
   const handlePracticeClick = () => {
     if (isRecording) {
       stopRecording();
+      if (recognitionRef.current) recognitionRef.current.stop();
     } else {
+      setLiveSpokenWords([]);
       startRecording();
+      if (recognitionRef.current) {
+        try { recognitionRef.current.start(); } catch (e) { console.error("Recognition start error:", e); }
+      }
+    }
+  };
+
+  // --- LISTEN FEATURE (Backend TTS) ---
+  const [isTtsLoading, setIsTtsLoading] = useState(false);
+  const audioPlayerRef = useRef(new Audio());
+
+  const handleListenClick = async () => {
+    if (!parentSentences[activeSentenceIndex]) return;
+
+    // Stop browser voice reading
+    window.speechSynthesis.cancel();
+
+    setIsTtsLoading(true);
+    try {
+      const text = parentSentences[activeSentenceIndex].text;
+      const response = await fetch('/api/practice/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text })
+      });
+
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        audioPlayerRef.current.src = url;
+        audioPlayerRef.current.play();
+      }
+    } catch (err) {
+      console.error("TTS Fetch error:", err);
+    } finally {
+      setIsTtsLoading(false);
     }
   };
 
@@ -186,122 +256,100 @@ const DocumentReader = ({
 
   const onPageLoadSuccess = useCallback(async (page) => {
     try {
-      setLocalSentences([]);
-      setActiveSentenceIndex(0);
-
       const textContent = await page.getTextContent();
       const items = textContent.items;
       if (items.length === 0) return;
 
-      // Get page viewport to determine height for header/footer detection
-      const viewport = page.getViewport({ scale: 1 });
-      const pageHeight = viewport.height;
-
-      // Define Metadata Zones (Top 10% and Bottom 10% of page)
-      // PDF coordinates: (0,0) is usually bottom-left. 
-      // So Footer is low Y, Header is high Y.
-      const footerThreshold = pageHeight * 0.1;
-      const headerThreshold = pageHeight * 0.9;
-
-      const heights = items.map(item => Math.abs(item.transform[3])).sort((a, b) => a - b);
-      const medianHeight = heights[Math.floor(heights.length / 2)] || 12;
-      const headingThreshold = medianHeight * 1.3;
-
-      let allSentences = [];
-      let fullText = "";
-      let currentItemIndices = [];
-
-      items.forEach((item, idx) => {
-        if (!item.str) return;
-
-        const height = Math.abs(item.transform[3]);
-        const y = item.transform[5]; // Y-coordinate
-
-        const isHeading = height > headingThreshold;
-        const isSerial = /^\(?[0-9a-zA-Z]{1,2}(\.|\))$/.test(item.str.trim());
-        const isHeaderOrFooter = y < footerThreshold || y > headerThreshold;
-
-        const isMetadata = isHeading || isSerial || isHeaderOrFooter;
-
-        if (isMetadata) {
-          if (fullText.trim()) {
-            const raw = fullText.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [fullText];
-            raw.forEach(s => {
-              if (s.trim()) allSentences.push({ text: s.trim(), isMetadata: false, itemIndices: [...currentItemIndices] });
-            });
-            fullText = "";
-            currentItemIndices = [];
-          }
-          allSentences.push({ text: item.str.trim(), isMetadata: true, itemIndices: [idx] });
-        } else {
-          fullText += item.str + " ";
-          currentItemIndices.push(idx);
-          // Split if full stop encountered
-          if (/[.!?]/.test(item.str)) {
-            const raw = fullText.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [fullText];
-            if (raw.length > 1 || (raw.length === 1 && /[.!?]$/.test(fullText.trim()))) {
-              allSentences.push({ text: fullText.trim(), isMetadata: false, itemIndices: [...currentItemIndices] });
-              fullText = "";
-              currentItemIndices = [];
-            }
-          }
-        }
-      });
-
-      if (fullText.trim()) {
-        const raw = fullText.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [fullText];
-        raw.forEach(s => {
-          if (s.trim()) allSentences.push({ text: s.trim(), isMetadata: false, itemIndices: [...currentItemIndices] });
-        });
-      }
-
-      setLocalSentences(allSentences);
-      setTimeout(() => mapSentencesToDom(allSentences), 1000);
+      // Map backend sentences (lines) for THIS page to DOM spans
+      // We wait for DOM to be ready (increased delay for complex PDFs)
+      setTimeout(() => mapSentencesToDom(items), 1500);
 
     } catch (e) {
       console.error("Error loading text content:", e);
     }
-  }, [pageNumber]);
+  }, [pageNumber, parentSentences]);
 
-  const mapSentencesToDom = (sentences) => {
+  const mapSentencesToDom = (textContentItems) => {
     const container = document.querySelector('.react-pdf__Page__textContent');
-    if (!container) return;
+    if (!container) {
+      console.warn("[DocumentReader] Text container not found for highlighting.");
+      return;
+    }
+
+    // Clear old highlights first
+    container.querySelectorAll('.sentence-active').forEach(el => {
+      el.classList.remove('sentence-active');
+    });
 
     const spans = Array.from(container.querySelectorAll('span'));
-    const map = sentences.map((s, sIdx) => {
-      const elements = s.itemIndices.map(idx => spans[idx]).filter(Boolean);
+    console.log(`[DocumentReader] Found ${spans.length} spans in PDF text layer.`);
+
+    // Group spans into lines based on Y-coordinate (using offsetTop for more stability)
+    let currentLineY = -1;
+    let lineSpans = [];
+    let linesInDom = [];
+
+    spans.forEach((span) => {
+      // Use offsetTop relative to parent for more stable grouping
+      const top = span.offsetTop;
+
+      // Filter out empty elements
+      if (span.innerText.trim().length === 0) return;
+
+      if (currentLineY === -1 || Math.abs(top - currentLineY) < 10) {
+        lineSpans.push(span);
+        if (currentLineY === -1) currentLineY = top;
+      } else {
+        linesInDom.push([...lineSpans]);
+        lineSpans = [span];
+        currentLineY = top;
+      }
+    });
+    if (lineSpans.length > 0) linesInDom.push(lineSpans);
+
+    console.log(`[DocumentReader] Detected ${linesInDom.length} lines in PDF DOM.`);
+
+    // Map linesInDom to our backend sentences for this page
+    const pageSentences = (parentSentences || []).filter(s => s.page === pageNumber);
+    console.log(`[DocumentReader] Backend has ${pageSentences.length} sentences for page ${pageNumber}.`);
+
+    const map = pageSentences.map((s, idx) => {
+      const elements = linesInDom[idx] || [];
       elements.forEach(el => {
         el.classList.add('sentence-token');
-        if (!s.isMetadata) {
-          el.classList.add('interactive-token');
-          el.onclick = (e) => {
-            e.stopPropagation();
-            handleSentenceClick(sIdx);
-          };
-        }
+        el.classList.add('interactive-token');
+        el.onclick = (e) => {
+          e.stopPropagation();
+          if (onJumpTo) onJumpTo(s.global_index);
+        };
       });
-      return elements;
+      return { global_index: s.global_index, elements };
     });
+
     setDomItemsMap(map);
   };
 
-  const handleSentenceClick = (index) => {
-    setActiveSentenceIndex(index);
-    if (onJumpTo) onJumpTo(index);
-    // If not currently reading, maybe start? Or just select.
-    // For now just select. If reading, it will pick up from here.
-    if (parentIsReading) {
-      window.speechSynthesis.cancel();
-    }
-  };
 
   // Highlighting Effect
   useEffect(() => {
-    if (domItemsMap.length === 0) return;
+    const container = document.querySelector('.react-pdf__Page__textContent');
 
-    domItemsMap.forEach((elements, idx) => {
-      const isActive = idx === activeSentenceIndex;
-      elements.forEach(el => {
+    if (domItemsMap.length === 0) {
+      // Remove focus mode if no map
+      if (container) container.classList.remove('focus-mode');
+      return;
+    }
+
+    // Enable focus mode when reading or practicing
+    if (container && (parentIsReading || isRecording)) {
+      container.classList.add('focus-mode');
+    } else if (container) {
+      container.classList.remove('focus-mode');
+    }
+
+    domItemsMap.forEach((mapItem) => {
+      const isActive = mapItem.global_index === activeSentenceIndex;
+      mapItem.elements.forEach(el => {
         if (isActive) {
           el.classList.add('sentence-active');
         } else {
@@ -309,33 +357,25 @@ const DocumentReader = ({
         }
       });
 
-      if (isActive && elements[0]) {
-        elements[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (isActive && mapItem.elements[0]) {
+        mapItem.elements[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
     });
-  }, [activeSentenceIndex, domItemsMap]);
+
+    // Handle Page Advance: if current sentence is on a different page, flip page
+    const currentSentence = parentSentences[activeSentenceIndex];
+    if (currentSentence && currentSentence.page !== pageNumber) {
+      setPageNumber(currentSentence.page);
+    }
+  }, [activeSentenceIndex, domItemsMap, pageNumber, parentSentences, parentIsReading, isRecording]);
 
 
 
-  // Reading Logic
+  // Reading Logic (Start Reading button)
   useEffect(() => {
-    if (parentIsReading && localSentences.length > 0) {
-      if (activeSentenceIndex >= localSentences.length) return;
-      const sentenceObj = localSentences[activeSentenceIndex];
-
-      // Auto-skip metadata segments (headings/serials)
-      if (sentenceObj.isMetadata) {
-        let nextIdx = activeSentenceIndex + 1;
-        while (nextIdx < localSentences.length && localSentences[nextIdx].isMetadata) {
-          nextIdx++;
-        }
-        if (nextIdx < localSentences.length) {
-          setActiveSentenceIndex(nextIdx);
-        } else {
-          window.speechSynthesis.cancel();
-        }
-        return;
-      }
+    if (parentIsReading && parentSentences.length > 0) {
+      if (activeSentenceIndex >= parentSentences.length) return;
+      const sentenceObj = parentSentences[activeSentenceIndex];
 
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(sentenceObj.text);
@@ -344,17 +384,14 @@ const DocumentReader = ({
       utterance.rate = readingSpeed / 120;
 
       utterance.onend = () => {
-        if (activeSentenceIndex < localSentences.length - 1) {
-          setActiveSentenceIndex(prev => prev + 1);
+        if (activeSentenceIndex < parentSentences.length - 1) {
+          if (onJumpTo) onJumpTo(activeSentenceIndex + 1);
         }
       };
 
       utterance.onerror = (event) => {
-        if (event.error === 'interrupted' || event.error === 'canceled') {
-          // These are expected when skipping or stopping
-          return;
-        }
-        console.error("Speech synthesis error:", event.error, event);
+        if (event.error === 'interrupted' || event.error === 'canceled') return;
+        console.error("Speech synthesis error:", event.error);
       };
 
       window.speechSynthesis.speak(utterance);
@@ -363,28 +400,41 @@ const DocumentReader = ({
     } else {
       window.speechSynthesis.cancel();
     }
-  }, [parentIsReading, activeSentenceIndex, localSentences, readingSpeed, selectedVoice]);
+  }, [parentIsReading, activeSentenceIndex, parentSentences, readingSpeed, selectedVoice]);
 
   // --- LIVELY CORRECTION LOGIC ---
   const getWordFeedback = () => {
-    if (!practiceResult || !localSentences[activeSentenceIndex]) return [];
+    if (!parentSentences[activeSentenceIndex]) return [];
 
-    const expected = localSentences[activeSentenceIndex].text.toLowerCase().replace(/[^\w\s]/g, '').split(/\s+/);
-    const spoken = (practiceResult.result?.spoken_text || "").toLowerCase().replace(/[^\w\s]/g, '').split(/\s+/);
+    // Original words
+    const expected = parentSentences[activeSentenceIndex].text.split(/\s+/);
 
-    return expected.map((word, i) => ({
-      word,
-      correct: spoken.includes(word) // Simple check, can be improved with alignment
-    }));
+    // 1. If we have final results from backend, use them
+    if (practiceResult && practiceResult.word_feedback) {
+      return practiceResult.word_feedback; // Should already be [{word, status}]
+    }
+
+    // 2. Otherwise, if we are currently recording, use live streaming data
+    if (isRecording) {
+      return expected.map(word => {
+        const clean = word.toLowerCase().replace(/[^\w\s]/g, '');
+        return {
+          word,
+          status: liveSpokenWords.includes(clean) ? 'correct' : 'pending'
+        };
+      });
+    }
+
+    return expected.map(word => ({ word, status: 'none' }));
   };
 
   const wordFeedback = getWordFeedback();
 
   // Auto-correction audio
   useEffect(() => {
-    if (practiceResult && practiceResult.result && practiceResult.result.score < 0.85) {
+    if (practiceResult && !practiceResult.is_correct) {
       const missedWords = wordFeedback
-        .filter(w => !w.correct)
+        .filter(w => w.status !== 'correct' && w.status !== 'pending' && w.status !== 'none')
         .map(w => w.word);
 
       if (missedWords.length > 0) {
@@ -402,18 +452,14 @@ const DocumentReader = ({
   }, [practiceResult]);
 
   const handleNextSentence = () => {
-    if (activeSentenceIndex < localSentences.length - 1) {
-      const nextIndex = activeSentenceIndex + 1;
-      setActiveSentenceIndex(nextIndex);
-      if (onJumpTo) onJumpTo(nextIndex);
+    if (activeSentenceIndex < (parentSentences || []).length - 1) {
+      if (onJumpTo) onJumpTo(activeSentenceIndex + 1);
     }
   };
 
   const handlePrevSentence = () => {
     if (activeSentenceIndex > 0) {
-      const prevIndex = activeSentenceIndex - 1;
-      setActiveSentenceIndex(prevIndex);
-      if (onJumpTo) onJumpTo(prevIndex);
+      if (onJumpTo) onJumpTo(activeSentenceIndex - 1);
     }
   };
 
@@ -429,37 +475,38 @@ const DocumentReader = ({
 
         <div className="control-group">
           <button onClick={onReadAloud} className={`btn ${parentIsReading ? 'btn-danger' : 'btn-primary'}`} style={{ width: '100%', padding: '12px' }}>
-            {parentIsReading ? '⏹ Stop Reading' : '▶ Start Reading'}
+            {parentIsReading ? '⏹ Stop Auto-Read' : '▶ Start Auto-Read Page'}
           </button>
         </div>
 
         <div className="control-group box" style={{ padding: '15px', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: '8px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
             <button className="btn btn-sm btn-secondary" onClick={handlePrevSentence} disabled={activeSentenceIndex <= 0}>◀</button>
-            <span className="stat-value" style={{ flex: 1, textAlign: 'center' }}>{activeSentenceIndex + 1} / {localSentences.length}</span>
-            <button className="btn btn-sm btn-secondary" onClick={handleNextSentence} disabled={activeSentenceIndex >= localSentences.length - 1}>▶</button>
+            <span className="stat-value" style={{ flex: 1, textAlign: 'center' }}>{activeSentenceIndex + 1} / {(parentSentences || []).length}</span>
+            <button className="btn btn-sm btn-secondary" onClick={handleNextSentence} disabled={activeSentenceIndex >= (parentSentences || []).length - 1}>▶</button>
           </div>
 
-          <div style={{ fontSize: '0.9rem', color: '#e2e8f0', backgroundColor: 'rgba(255,255,255,0.05)', padding: '10px', borderRadius: '6px', maxHeight: '150px', overflowY: 'auto' }}>
-            {localSentences.length > 0 ? (
-              practiceResult ? (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                  {wordFeedback.map((w, i) => (
-                    <span
-                      key={i}
-                      style={{
-                        color: w.correct ? '#48BB78' : '#F56565',
-                        fontWeight: w.correct ? 'normal' : 'bold',
-                        textDecoration: w.correct ? 'none' : 'underline'
-                      }}
-                    >
-                      {w.word}
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                localSentences[activeSentenceIndex]?.text
-              )
+          <div style={{ fontSize: '1.1rem', color: '#e2e8f0', backgroundColor: 'rgba(255,255,255,0.05)', padding: '15px', borderRadius: '10px', minHeight: '100px', display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
+            {(parentSentences || []).length > 0 ? (
+              wordFeedback.map((w, i) => (
+                <span
+                  key={i}
+                  className={`practice-word ${w.status}`}
+                  style={{
+                    color: w.status === 'correct' ? '#48BB78' :
+                      w.status === 'mispronounced' ? '#ED8936' :
+                        w.status === 'missed' ? '#F56565' :
+                          w.status === 'pending' ? '#A0AEC0' : '#E2E8F0',
+                    fontWeight: w.status === 'correct' ? '600' : 'normal',
+                    transition: 'all 0.3s ease',
+                    padding: '2px 4px',
+                    borderRadius: '4px',
+                    backgroundColor: w.status === 'correct' ? 'rgba(72,187,120,0.1)' : 'transparent'
+                  }}
+                >
+                  {w.word}
+                </span>
+              ))
             ) : (
               <div style={{ color: '#a0aec0' }}>
                 {loading ? "Loading PDF..." : "Extracting text..."}
@@ -471,26 +518,36 @@ const DocumentReader = ({
             <div className="practice-feedback fade-in" style={{ marginTop: '10px', padding: '10px', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: '6px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
                 <span style={{ fontSize: '0.8rem', color: '#a0aec0' }}>Accuracy Score:</span>
-                <span style={{ fontWeight: 'bold', color: practiceResult.result.score >= 0.85 ? '#48BB78' : '#ED8936' }}>
-                  {Math.round(practiceResult.result.score * 100)}%
+                <span style={{ fontWeight: 'bold', color: practiceResult.is_correct ? '#48BB78' : '#ED8936' }}>
+                  {Math.round(practiceResult.score * 100)}%
                 </span>
               </div>
-              <p style={{ fontSize: '0.85rem', margin: 0, fontStyle: 'italic' }}>
-                {practiceResult.result.feedback}
+              <p style={{ fontSize: '0.9rem', margin: 0, fontStyle: 'italic', color: '#fff' }}>
+                {practiceResult.feedback}
               </p>
             </div>
           )}
 
-          <div style={{ display: 'flex', gap: '8px', marginTop: '15px' }}>
-            <button
-              onClick={handlePracticeClick}
-              className={`btn ${isRecording ? 'btn-danger pulse' : 'btn-primary'}`}
-              style={{ flex: 1 }}
-              disabled={isProcessing}
-            >
-              {isRecording ? '⏹ Stop' : '🎤 Practice'}
-            </button>
-            <button onClick={handleNextSentence} className="btn btn-success" style={{ flex: 1, backgroundColor: '#48BB78' }}>Continue ➡</button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '15px' }}>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={handleListenClick}
+                className="btn btn-secondary"
+                style={{ flex: 1 }}
+                disabled={isTtsLoading}
+              >
+                {isTtsLoading ? '...' : '🔊 Listen'}
+              </button>
+              <button
+                onClick={handlePracticeClick}
+                className={`btn ${isRecording ? 'btn-danger pulse' : 'btn-primary'}`}
+                style={{ flex: 2 }}
+                disabled={isProcessing}
+              >
+                {isRecording ? '⏹ Stop' : '🎤 Practice'}
+              </button>
+            </div>
+            <button onClick={handleNextSentence} className="btn btn-success" style={{ width: '100%', backgroundColor: '#48BB78' }}>Continue ➡</button>
           </div>
           {isRecording && <p style={{ color: '#ff5252', fontSize: '0.8rem', textAlign: 'center', marginTop: '5px' }}>Recording in progress...</p>}
         </div>
