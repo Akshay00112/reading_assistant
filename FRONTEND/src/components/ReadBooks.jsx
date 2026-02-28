@@ -8,7 +8,7 @@ const ReadBooks = () => {
     const { logout, user, pdfHistory, fetchHistory, deleteFromHistory } = useAuth();
     const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState('online-library'); // 'online-library' only
+    const [activeTab, setActiveTab] = useState('ONLINE LIBRARY'); // 'ONLINE LIBRARY' only
     const [onlineBooks, setOnlineBooks] = useState([]);
     const [loadingOnline, setLoadingOnline] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
@@ -22,7 +22,7 @@ const ReadBooks = () => {
 
     // Fetch featured online books when tab changes
     useEffect(() => {
-        if (activeTab === 'online-library' && onlineBooks.length === 0 && !loadingOnline) {
+        if (activeTab === 'ONLINE LIBRARY' && onlineBooks.length === 0 && !loadingOnline) {
             fetchFeaturedBooks();
         }
     }, [activeTab]);
@@ -73,7 +73,7 @@ const ReadBooks = () => {
 
     const handleLogout = () => {
         logout();
-        navigate('/signin');
+        navigate('/');
     };
 
     const handleReadPdf = (pdf) => {
@@ -135,7 +135,7 @@ const ReadBooks = () => {
             <div style={{ padding: '40px 24px', maxWidth: '1200px', margin: '0 auto', background: 'transparent' }}>
                 <div style={{ marginBottom: '50px' }}>
                     <h1 className="gradient-text" style={{ fontSize: '2.5rem', marginBottom: '10px' }}>
-                        📖 Reading Library
+                        📖 READING LIBRARY
                     </h1>
                     <p className="text-secondary" style={{ fontSize: '1rem' }}>
                         Explore your books and discover online reading materials
@@ -150,7 +150,7 @@ const ReadBooks = () => {
                 {/* My Books tab removed — defaulting to Online Library */}
 
                 {/* Online Library Tab */}
-                {activeTab === 'online-library' && (
+                {activeTab === 'ONLINE LIBRARY' && (
                     <div>
                         {/* Search Bar */}
                         <form onSubmit={handleSearchOnlineBooks} style={{ marginBottom: '30px' }}>

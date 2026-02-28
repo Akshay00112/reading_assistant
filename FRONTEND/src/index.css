@@ -2,24 +2,19 @@
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&display=swap');
 
 :root {
-  --primary: #3b82f6;
-  --primary-hover: #2563eb;
-  --secondary: #60a5fa;
-  --accent: #93c5fd;
+  --primary: #6366f1;
+  --primary-hover: #4f46e5;
+  --secondary: #a855f7;
+  --accent: #ec4899;
   --background: #0f172a;
-  --surface: rgba(15, 23, 42, 0.7);
-  --glass: rgba(255, 255, 255, 0.05);
+  --surface: rgba(30, 41, 59, 0.7);
+  --glass: rgba(255, 255, 255, 0.1);
   --text-primary: #f8fafc;
   --text-secondary: #94a3b8;
   --success: #22c55e;
-  --warning: #eab308;
+  --warning: #f59e0b;
   --error: #ef4444;
-  --card-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
-
-  /* Blushade Palette */
-  --blu-dark: #0f172a;
-  --blu-mid: #1e3a8a;
-  --blu-light: #3b82f6;
+  --card-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
 }
 
 body {
@@ -27,11 +22,7 @@ body {
   font-family: 'Outfit', 'Inter', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background:
-    radial-gradient(circle at 0% 0%, rgba(59, 130, 246, 0.15) 0%, transparent 50%),
-    radial-gradient(circle at 100% 100%, rgba(37, 99, 235, 0.1) 0%, transparent 50%),
-    linear-gradient(135deg, #0f172a 0%, #172554 50%, #0f172a 100%);
-  background-attachment: fixed;
+  background: radial-gradient(circle at top right, #1e1b4b, #0f172a);
   color: var(--text-primary);
   min-height: 100vh;
   overflow-x: hidden;
@@ -85,33 +76,21 @@ code {
 }
 
 .sentence-active {
+  color: #000 !important;
+  z-index: 10;
+  position: relative;
+  transition: opacity 0.3s ease;
+}
+
+.online-book-reader .sentence-active {
   background-color: #fef08a !important;
   /* Yellow 200 */
-  color: #000 !important;
   box-shadow: 0 0 8px 2px rgba(254, 240, 138, 0.7);
   border-radius: 3px;
   animation: pulse-highlight 1s ease-in-out infinite;
-  filter: none !important;
-  opacity: 1 !important;
   transform: scale(1.05);
-  /* Pop out effect */
-  z-index: 10;
-  position: relative;
+  /* Pop out effect only strictly within online book */
   transition: transform 0.3s ease, box-shadow 0.3s ease;
-}
-
-.word-active {
-  background-color: #fbbf24 !important;
-  /* Amber 400 */
-  color: #000 !important;
-  box-shadow: 0 0 10px 2px rgba(251, 191, 36, 0.6);
-  border-radius: 3px;
-  transform: scale(1.1);
-  display: inline-block;
-  padding: 0 4px;
-  transition: all 0.2s ease;
-  z-index: 20;
-  position: relative;
 }
 
 @keyframes pulse-highlight {
@@ -129,55 +108,63 @@ code {
 /* Focus Reading Mode - Blur non-active lines */
 .react-pdf__Page__textContent {
   overflow: visible !important;
+  z-index: 10 !important;
+  /* Force text layer above the Z-index 5 magnifier container sibling */
 }
 
-.react-pdf__Page__textContent.focus-mode span:not(.sentence-active):not(.word-span) {
-  filter: blur(8px);
-  /* Increased blur for stronger focus */
-  opacity: 0.2;
-  /* Decreased opacity for better focus */
+/* Blur the underlying visual canvas for PDFs */
+.react-pdf__Page__canvas {
+  filter: blur(6px);
+  opacity: 0.4;
+  transition: filter 0.3s ease, opacity 0.3s ease;
+}
+
+/* Blur non-active text in standard HTML views like Online Book */
+.online-book-reader span:not(.sentence-active),
+.react-pdf__Page__textContent span:not(.sentence-active):not(.word-span) {
+  filter: blur(6px);
+  opacity: 0.4;
   transition: filter 0.3s ease, opacity 0.3s ease;
 }
 
 .react-pdf__Page__textContent.focus-mode .sentence-active {
   filter: none !important;
   opacity: 1 !important;
-  transform: scale(1.05) !important;
-  /* Reduced scale to prevent jumpiness */
-  background-color: rgba(255, 255, 255, 0.4) !important;
-  /* Semi-transparent white */
+  /* High contrast dark text for readability on the white lens */
   color: #000000 !important;
-  z-index: 10 !important;
-  border-radius: 4px;
-  padding: 0 5px;
-  transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), background-color 0.3s ease;
-  overflow: visible !important;
-}
-
-.online-book-reader .sentence-active {
-  background-color: rgba(59, 130, 246, 0.15) !important;
-  color: #e2e8f0 !important;
+  font-weight: 700 !important;
+  text-shadow: 0 0 1px rgba(0, 0, 0, 0.3);
+  z-index: 100 !important;
+  background: transparent !important;
+  /* No independent span backgrounds to prevent fragmentation! */
   box-shadow: none !important;
-  transform: none !important;
-  animation: none !important;
 }
 
-/* Magnifier Lens Container */
+.online-book-reader {
+  overflow: visible !important;
+  position: relative;
+}
+
+/* Magnifier Lens Container - Provides the unified white pill for PDF focus mode */
 .magnifier-container {
   position: absolute;
   pointer-events: none;
-  z-index: 95;
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  border-radius: 20px;
-  /* Pill-like shape */
-  background: rgba(255, 255, 255, 0.08);
-  /* More transparent background */
-  /* Blur removed for perfect visibility */
-  transition: all 0.5s cubic-bezier(0.23, 1, 0.32, 1);
+  z-index: 5;
+  /* Sit immediately behind the text layer spans (which are 100) */
+  border-radius: 12px;
+  background: #ffffff;
+  /* Solid white background */
+  transition: all 0.35s cubic-bezier(0.25, 0.8, 0.25, 1);
   box-shadow:
-    0 10px 40px rgba(0, 0, 0, 0.4),
-    inset 0 0 15px rgba(255, 255, 255, 0.2);
-  /* Subtle inner glow */
+    0 10px 40px rgba(0, 0, 0, 0.2),
+    /* Subtle drop shadow */
+    0 0 0 4px rgba(254, 240, 138, 0.8);
+  /* Yellow focus aura tightly hugging the pill */
+}
+
+/* Hide magnifier container for online books since they utilize standard element highlighting */
+.online-book-reader .magnifier-container {
+  display: none !important;
 }
 
 /* Word-level feedback in PDF text layer */

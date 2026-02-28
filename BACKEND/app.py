@@ -128,11 +128,6 @@ def create_app():
 
 
 if __name__ == '__main__':
-    print(">>> Starting Dyslexia Reading Assistant Backend...")
-    # Pre-loading moved to lazy load in services to avoid startup delays
-    # from services.speech_service import load_wav2vec2_model
-    # load_wav2vec2_model()
-
     app = create_app()
     print("API available at: http://localhost:5000")
     print("Auth endpoints: POST /api/auth/register, POST /api/auth/login")

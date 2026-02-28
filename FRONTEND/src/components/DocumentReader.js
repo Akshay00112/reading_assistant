@@ -34,7 +34,6 @@ const DocumentReader = ({
   const [contentLoading, setContentLoading] = useState(isOnlineBook);
   const [contentError, setContentError] = useState('');
   const [onlineSentences, setOnlineSentences] = useState([]);
-  const [activeWordIndex, setActiveWordIndex] = useState(-1);
 
   // Audio refs
   const utteranceRef = useRef(null);
@@ -300,35 +299,29 @@ const DocumentReader = ({
   const handleListenClick = async () => {
     if (!effectiveSentences[activeSentenceIndex]) return;
 
-    // Stop existing audio
+    // Stop browser voice reading
     window.speechSynthesis.cancel();
-    audioPlayerRef.current.pause();
 
-    const text = effectiveSentences[activeSentenceIndex].text;
-    const utterance = new SpeechSynthesisUtterance(text);
+    setIsTtsLoading(true);
+    try {
+      const text = effectiveSentences[activeSentenceIndex].text;
+      const response = await fetch('/api/practice/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text })
+      });
 
-    if (selectedVoice) utterance.voice = selectedVoice;
-    utterance.rate = readingSpeed / 120; // Normalize speed
-
-    utterance.onboundary = (event) => {
-      if (event.name === 'word') {
-        const charIndex = event.charIndex;
-        const words = text.substring(0, charIndex + event.charLength).trim().split(/\s+/);
-        setActiveWordIndex(words.length - 1);
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        audioPlayerRef.current.src = url;
+        audioPlayerRef.current.play();
       }
-    };
-
-    utterance.onend = () => {
-      setActiveWordIndex(-1);
-      // Auto-advance to next sentence
-      if (activeSentenceIndex < effectiveSentences.length - 1) {
-        setTimeout(() => {
-          handleNextSentence();
-        }, 500);
-      }
-    };
-
-    window.speechSynthesis.speak(utterance);
+    } catch (err) {
+      console.error("TTS Fetch error:", err);
+    } finally {
+      setIsTtsLoading(false);
+    }
   };
 
   // --- CORE LOGIC: SENTENCE HIGHLIGHTING ---
@@ -350,10 +343,7 @@ const DocumentReader = ({
 
   const mapSentencesToDom = (textContentItems) => {
     const container = document.querySelector('.react-pdf__Page__textContent');
-    if (!container) {
-      console.warn("[DocumentReader] Text container not found for highlighting.");
-      return;
-    }
+    if (!container) return;
 
     // Clear old highlights first
     container.querySelectorAll('.sentence-active').forEach(el => {
@@ -361,48 +351,43 @@ const DocumentReader = ({
     });
 
     const spans = Array.from(container.querySelectorAll('span'));
-    console.log(`[DocumentReader] Found ${spans.length} spans in PDF text layer.`);
-
-    // Group spans into lines based on Y-coordinate (using offsetTop for more stability)
-    let currentLineY = -1;
-    let lineSpans = [];
-    let linesInDom = [];
-
-    spans.forEach((span) => {
-      // Use offsetTop relative to parent for more stable grouping
-      const top = span.offsetTop;
-
-      // Filter out empty elements
-      if (span.innerText.trim().length === 0) return;
-
-      if (currentLineY === -1 || Math.abs(top - currentLineY) < 10) {
-        lineSpans.push(span);
-        if (currentLineY === -1) currentLineY = top;
-      } else {
-        linesInDom.push([...lineSpans]);
-        lineSpans = [span];
-        currentLineY = top;
-      }
-    });
-    if (lineSpans.length > 0) linesInDom.push(lineSpans);
-
-    console.log(`[DocumentReader] Detected ${linesInDom.length} lines in PDF DOM.`);
-
-    // Map linesInDom to our backend sentences for this page
     const pageSentences = (parentSentences || []).filter(s => s.page === pageNumber);
-    console.log(`[DocumentReader] Backend has ${pageSentences.length} sentences for page ${pageNumber}.`);
+    const validSpans = spans.filter(span => span.innerText.trim().length > 0);
 
-    const map = pageSentences.map((s, idx) => {
-      const elements = linesInDom[idx] || [];
-      elements.forEach(el => {
+    // Sort spans using natural DOM order (which react-pdf provides), usually correct for reading flow.
+    // Now, map spans to sentences using a greedy matching algorithm based on text character content.
+    const map = [];
+    let currentSpanIdx = 0;
+
+    pageSentences.forEach((sentence) => {
+      let expectedText = sentence.text.replace(/\s+/g, '').toLowerCase();
+      let elementsForSentence = [];
+      let accumulatedText = "";
+
+      // Greedily consume spans until we've matched roughly the expected text length
+      // Use 0.85 threshold to handle slight mismatches in PDF text extraction vs DOM text
+      while (currentSpanIdx < validSpans.length && accumulatedText.length < expectedText.length * 0.85) {
+        const span = validSpans[currentSpanIdx];
+        const spanText = span.innerText.replace(/\s+/g, '').toLowerCase();
+
+        accumulatedText += spanText;
+        elementsForSentence.push(span);
+        currentSpanIdx++;
+      }
+
+      // Sometimes a span contains text from multiple sentences. Let the next sentence
+      // start at the next span (this is standard for simple text layer mappings where spans are atomic).
+
+      elementsForSentence.forEach(el => {
         el.classList.add('sentence-token');
         el.classList.add('interactive-token');
         el.onclick = (e) => {
           e.stopPropagation();
-          if (onJumpTo) onJumpTo(s.global_index);
+          if (onJumpTo) onJumpTo(sentence.global_index);
         };
       });
-      return { global_index: s.global_index, elements };
+
+      map.push({ global_index: sentence.global_index, elements: elementsForSentence });
     });
 
     setDomItemsMap(map);
@@ -411,17 +396,20 @@ const DocumentReader = ({
 
   // Highlighting Effect
   useEffect(() => {
-    const container = document.querySelector('.react-pdf__Page__textContent');
+    // Focus mode styling wrapper
+    const pdfContainer = document.querySelector('.react-pdf__Page__textContent');
+    const onlineContainer = document.querySelector('.online-book-reader');
 
-    if (domItemsMap.length === 0) {
-      // Remove focus mode if no map
-      if (container) container.classList.remove('focus-mode');
-      return;
+    if (pdfContainer) {
+      if (domItemsMap.length > 0) {
+        pdfContainer.classList.add('focus-mode');
+      } else {
+        pdfContainer.classList.remove('focus-mode');
+      }
     }
 
-    // Focus mode is now always enabled in reader view
-    if (container) {
-      container.classList.add('focus-mode');
+    if (domItemsMap.length === 0) {
+      return;
     }
 
     domItemsMap.forEach((mapItem) => {
@@ -429,6 +417,16 @@ const DocumentReader = ({
       mapItem.elements.forEach(el => {
         if (isActive) {
           el.classList.add('sentence-active');
+
+          // Apply word-level coloring if practiceResult exists for this sentence
+          if (practiceResult && practiceResult.word_feedback) {
+            applyWordColoringToElement(el, practiceResult.word_feedback);
+          } else {
+            // Reset element content to original text if no feedback
+            if (el.dataset.originalText) {
+              el.innerText = el.dataset.originalText;
+            }
+          }
         } else {
           el.classList.remove('sentence-active');
           // Reset non-active lines
@@ -443,8 +441,9 @@ const DocumentReader = ({
 
         // Update Magnifier Lens Position
         if (lensRef.current) {
-          const container = document.querySelector('.react-pdf__Page__textContent');
+          const container = document.querySelector('.react-pdf__Page__textContent') || document.querySelector('.online-book-reader');
           if (container) {
+            // Calculate bounding box of all elements in the active sentence
             let minTop = Infinity;
             let maxBottom = -Infinity;
             let minLeft = Infinity;
@@ -463,29 +462,30 @@ const DocumentReader = ({
               maxRight = Math.max(maxRight, relativeLeft + rect.width);
             });
 
-            const paddingX = 50;
-            const paddingY = 30;
+            // Add padding for the "lens" look
+            const paddingX = 12; // Snug horizontal padding
+            const paddingY = 4; // Snug vertical padding
 
             lensRef.current.style.display = 'block';
             lensRef.current.style.top = `${minTop - paddingY}px`;
-            lensRef.current.style.left = `${minLeft - paddingX}px`;
-            lensRef.current.style.width = `${(maxRight - minLeft) + (paddingX * 2)}px`;
+
+            // Start the lens slightly before the text starts
+            const leftPos = Math.max(0, minLeft - paddingX);
+            lensRef.current.style.left = `${leftPos}px`;
+
+            // The right edge is exactly the rightmost text plus padding
+            const requiredRightEdge = maxRight + paddingX;
+
+            // Width spans from the left position to the right edge
+            const safeWidth = requiredRightEdge - leftPos;
+
+            lensRef.current.style.width = `${safeWidth}px`;
             lensRef.current.style.height = `${(maxBottom - minTop) + (paddingY * 2)}px`;
             lensRef.current.style.opacity = '1';
           }
         }
       }
     });
-
-    // Handle word-level highlighting within active sentence elements
-    const activeMapItem = domItemsMap.find(m => m.global_index === activeSentenceIndex);
-    if (activeMapItem) {
-      let cumulativeWordOffset = 0;
-      activeMapItem.elements.forEach(el => {
-        const numWords = applyWordColoringToElement(el, wordFeedback, activeWordIndex, cumulativeWordOffset);
-        cumulativeWordOffset += numWords;
-      });
-    }
 
     // If no active sentence, hide lens
     const hasActive = domItemsMap.some(m => m.global_index === activeSentenceIndex);
@@ -494,47 +494,21 @@ const DocumentReader = ({
       lensRef.current.style.display = 'none';
     }
 
-    // Updated: applying word-level colors to PDF layer
-    function applyWordColoringToElement(element, wordFeedback, activeWIdx, wordOffset) {
+    // Simplified: No longer applying word-level colors to PDF layer
+    function applyWordColoringToElement(element, wordFeedback) {
       if (!element.dataset.originalText) {
         element.dataset.originalText = element.innerText;
       }
-
-      const parts = element.dataset.originalText.split(/(\s+)/);
-      let wordCountInElement = 0;
-
-      element.innerHTML = '';
-      parts.forEach((part) => {
-        if (part.trim().length === 0) {
-          element.appendChild(document.createTextNode(part));
-          return;
-        }
-
-        const currentGlobalWordIdx = wordOffset + wordCountInElement;
-        const isWordActive = currentGlobalWordIdx === activeWIdx;
-        const span = document.createElement('span');
-        span.className = 'word-span' + (isWordActive ? ' word-active' : '');
-
-        // Apply feedback color if available
-        if (wordFeedback && wordFeedback[currentGlobalWordIdx]) {
-          const status = wordFeedback[currentGlobalWordIdx].status;
-          if (status === 'correct') span.classList.add('word-correct');
-          else if (status === 'incorrect') span.classList.add('word-missed');
-        }
-
-        span.innerText = part;
-        element.appendChild(span);
-        wordCountInElement++;
-      });
-      return wordCountInElement;
+      // Just ensure the text is reset to original (no spans/colors)
+      element.innerText = element.dataset.originalText;
     }
 
-    // Handle Page Advance
+    // Handle Page Advance: if current sentence is on a different page, flip page
     const currentSentence = parentSentences[activeSentenceIndex];
     if (currentSentence && currentSentence.page !== pageNumber) {
       setPageNumber(currentSentence.page);
     }
-  }, [activeSentenceIndex, domItemsMap, pageNumber, parentSentences, parentIsReading, isRecording, practiceResult, activeWordIndex]);
+  }, [activeSentenceIndex, domItemsMap, pageNumber, parentSentences, parentIsReading, isRecording, practiceResult]);
 
   // Notify parent of current sentence text when it changes (for online books)
   useEffect(() => {
@@ -731,13 +705,13 @@ const DocumentReader = ({
         {/* Online Book Text Renderer */}
         {isOnlineBook ? (
           contentLoading ? (
-            <div className="text-white">Loading online book...</div>
+            <div className="text-white">Loading online book content...</div>
           ) : contentError ? (
             <div style={{ color: '#f87171', textAlign: 'center', padding: '40px' }}>
               <p>❌ {contentError}</p>
-              <p style={{ fontSize: '0.9rem', color: '#a0aec0' }}>Try selecting a different document</p>
+              <p style={{ fontSize: '0.9rem', color: '#a0aec0' }}>Try selecting a different book</p>
             </div>
-          ) : effectiveSentences.length > 0 ? (
+          ) : onlineSentences.length > 0 ? (
             <div className="online-book-reader" style={{
               maxWidth: '850px',
               width: '100%',
@@ -749,7 +723,7 @@ const DocumentReader = ({
               color: '#e2e8f0'
             }}>
               <div style={{ position: 'relative' }}>
-                {effectiveSentences.map((sentence, idx) => (
+                {onlineSentences.map((sentence, idx) => (
                   <span
                     key={idx}
                     className={idx === activeSentenceIndex ? 'sentence-active' : ''}
@@ -761,34 +735,27 @@ const DocumentReader = ({
                       transition: 'all 0.2s ease',
                       backgroundColor: idx === activeSentenceIndex ? 'rgba(59, 130, 246, 0.3)' : 'transparent',
                       fontWeight: idx === activeSentenceIndex ? '600' : 'normal',
-                      color: idx === activeSentenceIndex ? '#3b82f6' : '#e2e8f0',
-                      display: 'inline-block'
+                      color: idx === activeSentenceIndex ? '#3b82f6' : '#e2e8f0'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (idx !== activeSentenceIndex) {
+                        e.target.style.backgroundColor = 'rgba(75, 85, 99, 0.5)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (idx !== activeSentenceIndex) {
+                        e.target.style.backgroundColor = 'transparent';
+                      }
                     }}
                   >
-                    {sentence.text.split(/(\s+)/).map((part, wIdx) => {
-                      if (part.trim().length === 0) return part;
-
-                      // Calculate word index (skipping whitespaces)
-                      const realWordIdx = sentence.text.substring(0, sentence.text.indexOf(part, sentence.text.split(/(\s+)/).slice(0, wIdx).join('').length)).trim().split(/\s+/).length - 1;
-                      const isWordActive = idx === activeSentenceIndex && realWordIdx === activeWordIndex;
-
-                      return (
-                        <span
-                          key={wIdx}
-                          className={isWordActive ? 'word-active' : ''}
-                        >
-                          {part}
-                        </span>
-                      );
-                    })}
-                    {' '}
+                    {sentence.text}{' '}
                   </span>
                 ))}
                 <div ref={lensRef} className="magnifier-container" style={{ display: 'none', opacity: 0 }} />
               </div>
             </div>
           ) : (
-            <div className="text-white">No content found</div>
+            <div className="text-white">No sentences found</div>
           )
         ) : (
           /* PDF Renderer */

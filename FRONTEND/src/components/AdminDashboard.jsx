@@ -29,7 +29,7 @@ const AdminDashboard = () => {
 
     const handleLogout = () => {
         logout();
-        navigate('/signin');
+        navigate('/');
     };
 
     const fetchStats = async () => {
@@ -133,7 +133,7 @@ const AdminDashboard = () => {
             </div>
 
             <div className="admin-card">
-                <h1>🎛️ Admin Dashboard</h1>
+                <h1>🎛️ ADMIN DASHBOARD</h1>
                 <p className="muted">Manage users, uploads, and system health</p>
 
                 {/* Stats Cards */}

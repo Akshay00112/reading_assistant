@@ -57,7 +57,7 @@ const LandingPage = () => {
 
   const stats = [
     { number: '10K+', label: 'Students Learning' },
-    { number: '500+', label: 'Books Available' },
+    { number: '20+', label: 'Books Available' },
     { number: '98%', label: 'Success Rate' },
     { number: '24/7', label: 'Access Available' }
   ];
@@ -68,17 +68,17 @@ const LandingPage = () => {
       <nav className={`navbar ${isScrolled ? 'scrolled' : ''}`}>
         <div className="nav-container">
           <div className="logo-section">
-            <span className="logo-icon">📚</span>
-            <h1 className="logo-text">Zylo</h1>
+            <span className="logo-icon"></span>
+            <h1 className="logo-text">ZYLO</h1>
           </div>
           <div className="nav-buttons">
-            <button 
+            <button
               className="nav-btn signin"
               onClick={() => navigate('/signin')}
             >
               Sign In
             </button>
-            <button 
+            <button
               className="nav-btn signup"
               onClick={() => navigate('/signup')}
             >
@@ -102,19 +102,19 @@ const LandingPage = () => {
               Master Reading <span className="gradient-text">Your Way</span>
             </h1>
             <p className="hero-subtitle">
-              An AI-powered reading assistant that adapts to your learning style, 
+              An AI-powered reading assistant that adapts to your learning style,
               provides real-time feedback, and helps you become a confident reader.
             </p>
           </div>
 
           <div className="hero-buttons">
-            <button 
+            <button
               className="btn-primary btn-large"
               onClick={() => navigate('/signup')}
             >
               <span>🚀 Start Reading Today</span>
             </button>
-            <button 
+            <button
               className="btn-secondary btn-large"
               onClick={() => document.getElementById('features').scrollIntoView({ behavior: 'smooth' })}
             >
@@ -227,11 +227,11 @@ const LandingPage = () => {
               <li>✅ Personalized learning paths adapted to your pace</li>
               <li>✅ Real-time pronunciation and fluency feedback</li>
               <li>✅ Comprehensive progress tracking and insights</li>
-              <li>✅ Access 500+ books and texts from our library</li>
+              <li>✅ Access 20+ books and texts from our library</li>
               <li>✅ Join 10,000+ students improving their skills daily</li>
               <li>✅ Available 24/7 on any device</li>
             </ul>
-            <button 
+            <button
               className="btn-primary btn-large"
               onClick={() => navigate('/signup')}
             >
@@ -257,13 +257,13 @@ const LandingPage = () => {
           <h2>Ready to Improve Your Reading Skills?</h2>
           <p>Join thousands of learners transforming their reading journey</p>
           <div className="cta-buttons">
-            <button 
+            <button
               className="btn-primary btn-large"
               onClick={() => navigate('/signup')}
             >
               Get Started Free
             </button>
-            <button 
+            <button
               className="btn-outline btn-large"
               onClick={() => navigate('/signin')}
             >
@@ -298,7 +298,7 @@ const LandingPage = () => {
           </div>
         </div>
         <div className="footer-bottom">
-          <p>&copy; 2024 Zylo. Committed to helping you master reading. All rights reserved.</p>
+          <p>&copy; 2026 Zylo. Committed to helping you master reading. All rights reserved.</p>
         </div>
       </footer>
     </div>

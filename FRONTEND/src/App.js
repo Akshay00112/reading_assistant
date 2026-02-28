@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import confetti from 'canvas-confetti';
 import './App.css';
@@ -13,6 +13,7 @@ import AdminDashboard from './components/AdminDashboard';
 import Dashboard from './components/Dashboard';
 import ReadBooks from './components/ReadBooks';
 import LandingPage from './components/LandingPage';
+import ProgressTracking from './components/ProgressTracking';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
 // Protected Route Component
@@ -50,6 +51,12 @@ const HomeRoute = () => {
 function ReadingAssistant() {
   const { logout, user } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/');
+  };
   const [pdfFile, setPdfFile] = useState(null);
   const [pdfUrl, setPdfUrl] = useState(null);
   const [allSentences, setAllSentences] = useState([]);
@@ -269,7 +276,7 @@ function ReadingAssistant() {
     <div className="App">
       <div className="auth-header-info" style={{ position: 'absolute', top: '10px', right: '10px', display: 'flex', alignItems: 'center', gap: '10px', zIndex: 1000 }}>
         <span className="user-name-display" style={{ color: '#fff', fontWeight: '500' }}>{user?.name}</span>
-        <button onClick={logout} className="logout-btn" style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', padding: '5px 12px', borderRadius: '6px', cursor: 'pointer', transition: 'all 0.3s' }}>Logout</button>
+        <button onClick={handleLogout} className="logout-btn" style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', padding: '5px 12px', borderRadius: '6px', cursor: 'pointer', transition: 'all 0.3s' }}>Logout</button>
       </div>
       <Header />
 
@@ -337,6 +344,11 @@ function App() {
           <Route path="/books" element={
             <PrivateRoute>
               <ReadBooks />
+            </PrivateRoute>
+          } />
+          <Route path="/progress" element={
+            <PrivateRoute>
+              <ProgressTracking />
             </PrivateRoute>
           } />
           <Route path="/reader" element={

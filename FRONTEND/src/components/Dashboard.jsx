@@ -9,7 +9,7 @@ const Dashboard = () => {
 
     const handleLogout = () => {
         logout();
-        navigate('/signin');
+        navigate('/');
     };
 
     return (
@@ -48,7 +48,50 @@ const Dashboard = () => {
                     </p>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '30px', maxWidth: '800px', width: '100%' }}>
+                <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
+                    gap: '30px',
+                    maxWidth: '1200px',
+                    margin: '0 auto'
+                }}>
+                    {/* Online Library Card */}
+                    <div
+                        className="glass fade-in"
+                        style={{
+                            padding: '40px',
+                            borderRadius: '16px',
+                            background: 'rgba(30, 41, 59, 0.6)',
+                            border: '1px solid #334155',
+                            cursor: 'pointer',
+                            transition: 'all 0.3s ease',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            textAlign: 'center'
+                        }}
+                        onClick={() => navigate('/books')}
+                        onMouseEnter={(e) => {
+                            e.currentTarget.style.transform = 'translateY(-8px)';
+                            e.currentTarget.style.borderColor = '#60a5fa';
+                            e.currentTarget.style.background = 'rgba(30, 41, 59, 0.9)';
+                            e.currentTarget.style.boxShadow = '0 20px 50px rgba(59, 130, 246, 0.2)';
+                        }}
+                        onMouseLeave={(e) => {
+                            e.currentTarget.style.transform = 'translateY(0)';
+                            e.currentTarget.style.borderColor = '#334155';
+                            e.currentTarget.style.background = 'rgba(30, 41, 59, 0.6)';
+                            e.currentTarget.style.boxShadow = 'none';
+                        }}
+                    >
+                        <div style={{ fontSize: '4rem', marginBottom: '20px' }}>🌐</div>
+                        <h2 style={{ margin: '0 0 15px 0', color: '#e5e7eb', fontSize: '1.8rem' }}>
+                            Online Library
+                        </h2>
+                        <p style={{ margin: '0', color: '#a0aec0', fontSize: '1rem', lineHeight: '1.6' }}>
+                            Explore our collection of curated books and stories to practice reading
+                        </p>
+                    </div>
 
                     {/* Upload PDF Card */}
                     <div
@@ -63,16 +106,14 @@ const Dashboard = () => {
                             display: 'flex',
                             flexDirection: 'column',
                             alignItems: 'center',
-                            textAlign: 'center',
-                            position: 'relative',
-                            overflow: 'hidden'
+                            textAlign: 'center'
                         }}
-                        onClick={() => navigate('/upload')}
+                        onClick={() => navigate('/reader')}
                         onMouseEnter={(e) => {
                             e.currentTarget.style.transform = 'translateY(-8px)';
-                            e.currentTarget.style.borderColor = '#3b82f6';
+                            e.currentTarget.style.borderColor = '#8b5cf6';
                             e.currentTarget.style.background = 'rgba(30, 41, 59, 0.9)';
-                            e.currentTarget.style.boxShadow = '0 20px 50px rgba(59, 130, 246, 0.2)';
+                            e.currentTarget.style.boxShadow = '0 20px 50px rgba(139, 92, 246, 0.2)';
                         }}
                         onMouseLeave={(e) => {
                             e.currentTarget.style.transform = 'translateY(0)';
@@ -81,16 +122,18 @@ const Dashboard = () => {
                             e.currentTarget.style.boxShadow = 'none';
                         }}
                     >
-                        <div style={{ fontSize: '4rem', marginBottom: '20px' }}>📤</div>
+                        <div style={{ fontSize: '4rem', marginBottom: '20px' }}>📂</div>
                         <h2 style={{ margin: '0 0 15px 0', color: '#e5e7eb', fontSize: '1.8rem' }}>
-                            Upload PDF
+                            Uploaded PDF
                         </h2>
                         <p style={{ margin: '0', color: '#a0aec0', fontSize: '1rem', lineHeight: '1.6' }}>
-                            Upload a new PDF to practice reading and pronunciation
+                            Select from your previously uploaded documents and practice reading
                         </p>
                     </div>
+                </div>
 
-                    {/* Read Books Card */}
+                {/* Progress Tracking Card (Below the others) */}
+                <div style={{ maxWidth: '1200px', margin: '30px auto 0 auto' }}>
                     <div
                         className="glass fade-in"
                         style={{
@@ -101,18 +144,18 @@ const Dashboard = () => {
                             cursor: 'pointer',
                             transition: 'all 0.3s ease',
                             display: 'flex',
-                            flexDirection: 'column',
+                            flexDirection: 'row',
                             alignItems: 'center',
-                            textAlign: 'center',
-                            position: 'relative',
-                            overflow: 'hidden'
+                            justifyContent: 'center',
+                            gap: '40px',
+                            textAlign: 'left'
                         }}
-                        onClick={() => navigate('/books')}
+                        onClick={() => navigate('/progress')}
                         onMouseEnter={(e) => {
                             e.currentTarget.style.transform = 'translateY(-8px)';
-                            e.currentTarget.style.borderColor = '#a855f7';
+                            e.currentTarget.style.borderColor = '#ec4899';
                             e.currentTarget.style.background = 'rgba(30, 41, 59, 0.9)';
-                            e.currentTarget.style.boxShadow = '0 20px 50px rgba(168, 85, 247, 0.2)';
+                            e.currentTarget.style.boxShadow = '0 20px 50px rgba(236, 72, 153, 0.2)';
                         }}
                         onMouseLeave={(e) => {
                             e.currentTarget.style.transform = 'translateY(0)';
@@ -121,16 +164,18 @@ const Dashboard = () => {
                             e.currentTarget.style.boxShadow = 'none';
                         }}
                     >
-                        <div style={{ fontSize: '4rem', marginBottom: '20px' }}>📖</div>
-                        <h2 style={{ margin: '0 0 15px 0', color: '#e5e7eb', fontSize: '1.8rem' }}>
-                            Read Books
-                        </h2>
-                        <p style={{ margin: '0', color: '#a0aec0', fontSize: '1rem', lineHeight: '1.6' }}>
-                            Select from your previously uploaded documents and practice reading
-                        </p>
+                        <div style={{ fontSize: '4.5rem' }}>📊</div>
+                        <div>
+                            <h2 style={{ margin: '0 0 10px 0', color: '#e5e7eb', fontSize: '2rem' }}>
+                                Track Progress
+                            </h2>
+                            <p style={{ margin: '0', color: '#a0aec0', fontSize: '1.1rem', lineHeight: '1.6' }}>
+                                View detailed statistics, reading history, and monitor your improvement journey
+                            </p>
+                        </div>
                     </div>
-
                 </div>
+
             </div>
         </div>
     );

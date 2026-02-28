@@ -9,12 +9,6 @@ PyPDF2==3.0.1
 pdfplumber
 python-dotenv==1.0.0
 requests==2.31.0
-transformers
-torch
 numpy
-scipy
-soundfile
-phonemizer-fork
-dtw-python
 dnspython
 certifi

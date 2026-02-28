@@ -60,6 +60,14 @@ const SignUp = () => {
 
     return (
         <div className="auth-container">
+            <button
+                className="auth-back-button"
+                onClick={() => navigate('/')}
+                title="Back to home"
+            >
+                <span className="back-icon">←</span>
+                <span className="back-text">Back</span>
+            </button>
             <div className="auth-background"></div>
             <div className="floating-orb orb1"></div>
             <div className="floating-orb orb2"></div>

@@ -8,38 +8,15 @@ import PyPDF2
 import io
 import uuid
 from config import Config
-import torch
-import numpy as np
-from transformers import Wav2Vec2Processor, Wav2Vec2ForCTC
-
 # ==========================================
-# 0. GLOBAL MODEL LOADING (SINGLETON PATTERN)
+# 0. TTS & SPEECH UTILS
 # ==========================================
-# Global model instance
-_wav2vec2_processor = None
-_wav2vec2_model = None
-
-def load_wav2vec2_model():
-    global _wav2vec2_processor, _wav2vec2_model
-    if _wav2vec2_model is None:
-        try:
-            print("[INIT] Loading Wav2Vec2 model...")
-            from transformers import Wav2Vec2Processor, Wav2Vec2ForCTC
-            _wav2vec2_processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h")
-            _wav2vec2_model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base-960h")
-            print("[INIT] Wav2Vec2 model loaded successfully")
-        except Exception as e:
-            print(f"[ERROR] Failed to load Wav2Vec2: {e}")
 
 class SpeechService:
     # ==========================================
     # 1. INITIALIZATION & SETUP
     # ==========================================
     def __init__(self):
-        # Initialize model if not already loaded
-        if _wav2vec2_model is None:
-            load_wav2vec2_model()
-            
         self.engine = self._init_tts()
         self.recognizer = sr.Recognizer()
         self._configure_recognizer()
@@ -50,10 +27,6 @@ class SpeechService:
         self.total_practiced = 0
         self.is_reading = False
         self.current_pdf = None
-        
-        # Use global instances
-        self.processor = _wav2vec2_processor
-        self.model = _wav2vec2_model
     
     def _init_tts(self):
         """Initialize text-to-speech engine"""
@@ -433,48 +406,21 @@ class SpeechService:
             raise RuntimeError(f"Microphone error: {e}")
     
     def transcribe(self, audio):
-        """Convert speech to text using Wav2Vec2"""
-        if self.model and self.processor:
-            try:
-                # Get raw data at 16kHz
-                raw_data = audio.get_raw_data(convert_rate=16000, convert_width=2)
-                # Convert to numpy array (int16) -> float32
-                input_values = np.frombuffer(raw_data, dtype=np.int16).astype(np.float32)
-                # Normalize (16-bit PCM)
-                input_values = input_values / 32768.0
-                
-                # Tokenize
-                input_values = self.processor(input_values, return_tensors="pt", sampling_rate=16000).input_values
-                
-                # Inference
-                with torch.no_grad():
-                    logits = self.model(input_values).logits
-                
-                # Decode
-                predicted_ids = torch.argmax(logits, dim=-1)
-                transcription = self.processor.batch_decode(predicted_ids)[0]
-                
-                print(f"[TRANSCRIPTION-W2V2] '{transcription}'")
-                return transcription.lower()
-                
-            except Exception as e:
-                print(f"[ERROR] Wav2Vec2 Inference error: {e}")
-                # Fallback to Google if inference fails
-                try:
-                    text = self.recognizer.recognize_google(audio)
-                    print(f"[TRANSCRIPTION-GOOGLE] '{text}'")
-                    return text.lower()
-                except Exception as e_google:
-                     raise RuntimeError(f"Speech recognition service error: {e} | {e_google}")
-        else:
-             # Fallback to Google if model failed to load
-             try:
-                text = self.recognizer.recognize_google(audio)
-                return text.lower()
-             except sr.UnknownValueError:
-                raise RuntimeError("Could not understand the audio")
-             except sr.RequestError as e:
-                raise RuntimeError(f"Speech recognition service error: {e}")
+        """Convert speech to text using Google Speech Recognition"""
+        try:
+            # Using Google Speech Recognition fallback (reliable and lightweight)
+            text = self.recognizer.recognize_google(audio)
+            print(f"[TRANSCRIPTION-GOOGLE] '{text}'")
+            return text.lower()
+        except sr.UnknownValueError:
+            print("[ERROR] Google Speech Recognition could not understand the audio")
+            return ""
+        except sr.RequestError as e:
+            print(f"[ERROR] Google Speech Recognition service error: {e}")
+            return ""
+        except Exception as e:
+            print(f"[ERROR] Transcription failed: {e}")
+            return ""
     
     def calculate_similarity(self, original, spoken):
         """Calculate similarity between original and spoken text"""
