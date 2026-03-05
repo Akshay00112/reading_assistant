@@ -207,20 +207,35 @@ def evaluate_pronunciation():
         if not audio_file or not expected_text:
             return jsonify({
                 "success": False,
-                "message": "audio and expected text are required"
+                "message": f"audio and expected text are required. Got: audio={'YES' if audio_file else 'NO'}, word={'YES' if expected_text else 'NO'}"
             }), 400
 
         audio_bytes = audio_file.read()
+        print(f"🎤 Received audio: {len(audio_bytes)} bytes")
         
+        if len(audio_bytes) < 100:
+            return jsonify({
+                "success": False,
+                "message": "Audio file too small. Please try recording again."
+            }), 400
+
         # Using SpeechService for transcription and scoring
         from services.speech_service import SpeechService
         speech_service = SpeechService()
         
-        # We need to convert audio_bytes to an AudioData object for SpeechService
-        import speech_recognition as sr
-        audio_io = io.BytesIO(audio_bytes)
-        with sr.AudioFile(audio_io) as source:
-            audio_data = speech_service.recognizer.record(source)
+        try:
+            audio_io = io.BytesIO(audio_bytes)
+            with sr.AudioFile(audio_io) as source:
+                audio_data = speech_service.recognizer.record(source)
+        except Exception as audio_err:
+            print(f"❌ Audio format error: {audio_err}")
+            return jsonify({
+                "success": False,
+                "is_correct": False,
+                "error_type": "audio_format",
+                "message": "The audio format from your device is not supported. Please try again or use a different device.",
+                "details": str(audio_err)
+            }), 400
             
         spoken_text = speech_service.transcribe(audio_data)
         
@@ -240,11 +255,34 @@ def evaluate_pronunciation():
         # Threshold: 0.6 is good for learning
         is_correct = similarity >= 0.6
         
-        # Generate friendly feedback
+        # Generate friendly, encouraging feedback
         if is_correct:
-            feedback = f"Great job! You said: '{spoken_text}'"
+            if similarity >= 0.95:
+                feedback = f"🎉 Perfect! Excellent pronunciation!"
+            elif similarity >= 0.85:
+                feedback = f"✨ Great job! Very close to perfect!"
+            else:
+                feedback = f"👏 Good effort! You're making progress!"
         else:
-            feedback = f"Keep practicing! You said: '{spoken_text}'. Try to match: '{expected_text}'"
+            # Count the errors by type
+            mispronounced = sum(1 for w in word_feedback if w.get('status') == 'mispronounced')
+            missed = sum(1 for w in word_feedback if w.get('status') == 'missed')
+            article_errors = sum(1 for w in word_feedback if w.get('status') == 'article-error')
+            
+            feedback_parts = []
+            if similarity >= 0.4:
+                feedback_parts.append("Nice try! Keep working on these words:")
+            else:
+                feedback_parts.append("Let's focus on these words:")
+            
+            if article_errors > 0:
+                feedback_parts.append(f"• {article_errors} article word(s) (a/an/the) - watch your grammar!")
+            if mispronounced > 0:
+                feedback_parts.append(f"• {mispronounced} word(s) need clearer pronunciation")
+            if missed > 0:
+                feedback_parts.append(f"• {missed} word(s) were skipped")
+                
+            feedback = " ".join(feedback_parts)
 
         return jsonify({
             "success": True,
@@ -258,7 +296,18 @@ def evaluate_pronunciation():
     except Exception as e:
         print("❌ Pronunciation evaluation error:", e)
         import traceback
-        traceback.print_exc()
+        error_details = traceback.format_exc()
+        print(error_details)
+        
+        # Log to file for persistent debugging
+        try:
+            with open("backend_errors.log", "a") as f:
+                f.write(f"\n--- ERROR AT {time.strftime('%Y-%m-%d %H:%M:%S')} ---\n")
+                f.write(error_details)
+                f.write("\n-----------------------------------\n")
+        except:
+            pass
+
         return jsonify({
             "success": False,
             "error": str(e)

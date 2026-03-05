@@ -130,6 +130,20 @@ export const AuthProvider = ({ children }) => {
         return false;
     };
 
+    const cleanupDuplicates = async () => {
+        try {
+            const response = await axios.post('/api/history/cleanup/duplicates');
+            if (response.data.success) {
+                // Refresh history after cleanup
+                await fetchHistory();
+                return response.data.deleted_count;
+            }
+        } catch (error) {
+            console.error('Failed to cleanup duplicates:', error);
+        }
+        return 0;
+    };
+
     const value = {
         user,
         token,
@@ -141,7 +155,8 @@ export const AuthProvider = ({ children }) => {
         pdfHistory,
         fetchHistory,
         addToHistory,
-        deleteFromHistory
+        deleteFromHistory,
+        cleanupDuplicates
     };
 
     return (

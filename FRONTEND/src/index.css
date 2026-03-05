@@ -195,3 +195,10 @@ code {
   font-weight: 600;
   text-decoration: underline wavy;
 }
+
+.word-article-error {
+  color: #3b82f6 !important;
+  /* Blue 500 */
+  font-weight: 600;
+  text-decoration: underline dotted;
+}

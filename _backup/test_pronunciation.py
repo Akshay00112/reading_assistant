@@ -33,6 +33,18 @@ def test_pronunciation_logic():
             "dyslexia",
             "dislexia",
             ['mispronounced']
+        ),
+        # completely different word should still count as mispronounced
+        (
+            "plot",
+            "cat",
+            ['mispronounced']
+        ),
+        # article errors should be detected as article-error
+        (
+            "A short story",
+            "An short story",
+            ['article-error', 'correct', 'correct']
         )
     ]
     

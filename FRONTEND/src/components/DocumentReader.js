@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
+import { useNavigate } from 'react-router-dom';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
@@ -13,6 +14,7 @@ const DocumentReader = ({
   sentences: parentSentences,
   currentIndex: parentIndex,
   onJumpTo,
+  onRetry,
   currentPdfName,
   pdfUrl,
   isReading: parentIsReading,
@@ -28,6 +30,7 @@ const DocumentReader = ({
   textUrl = null, // New prop: URL to fetch text from
   onSentenceChange = null, // New callback to notify parent of current sentence
 }) => {
+  const navigate = useNavigate();
   const [numPages, setNumPages] = useState(null);
   const [pageNumber, setPageNumber] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -52,6 +55,7 @@ const DocumentReader = ({
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const recordingTimeoutRef = useRef(null); // Ref for auto-stop timeout
+  const [retryCount, setRetryCount] = useState(0); // Track retry attempts for encouragement
 
   // Magnifier Lens Ref
   const lensRef = useRef(null);
@@ -585,8 +589,41 @@ const DocumentReader = ({
   return (
     <div className="document-reader fade-in" style={{ backgroundColor: '#2d3748', height: '100vh', display: 'flex', flexDirection: 'row' }}>
 
+      {/* Fixed Back Button - Always Visible */}
+      <button 
+        className="btn btn-secondary btn-fixed-back" 
+        onClick={() => navigate(-1)}
+        style={{
+          position: 'fixed',
+          top: '20px',
+          left: '20px',
+          zIndex: '1100',
+          backgroundColor: 'rgba(99, 102, 241, 0.9)',
+          color: 'white',
+          border: '1px solid rgba(255, 255, 255, 0.2)',
+          padding: '10px 20px',
+          borderRadius: '20px',
+          cursor: 'pointer',
+          fontWeight: '600',
+          transition: 'all 0.3s ease',
+          boxShadow: '0 4px 15px rgba(0, 0, 0, 0.2)'
+        }}
+        onMouseEnter={(e) => {
+          e.target.style.backgroundColor = 'rgba(99, 102, 241, 1)';
+          e.target.style.transform = 'translateY(-2px)';
+          e.target.style.boxShadow = '0 6px 20px rgba(99, 102, 241, 0.4)';
+        }}
+        onMouseLeave={(e) => {
+          e.target.style.backgroundColor = 'rgba(99, 102, 241, 0.9)';
+          e.target.style.transform = 'translateY(0)';
+          e.target.style.boxShadow = '0 4px 15px rgba(0, 0, 0, 0.2)';
+        }}
+      >
+        ← Back
+      </button>
+
       <div className="reader-sidebar glass" style={{ width: '320px', flexShrink: 0, padding: '20px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-        <button className="btn btn-secondary" onClick={onClose} style={{ alignSelf: 'flex-start' }}>← Back</button>
+        <div style={{ height: '40px' }}></div> {/* Spacer for fixed back button */}
         <div>
           <h3 className="gradient-text" style={{ fontSize: '1.5rem', marginBottom: '5px' }}>Reader</h3>
           <p className="stat-label">{currentPdfName}</p>
@@ -617,20 +654,57 @@ const DocumentReader = ({
 
           <div style={{ fontSize: '1.1rem', color: '#e2e8f0', backgroundColor: 'rgba(255,255,255,0.05)', padding: '15px', borderRadius: '10px', minHeight: '100px', display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
             {effectiveSentences.length > 0 ? (
-              wordFeedback.map((w, i) => (
-                <span
-                  key={i}
-                  className="practice-word"
-                  style={{
-                    color: '#E2E8F0',
-                    transition: 'all 0.3s ease',
-                    padding: '2px 4px',
-                    borderRadius: '4px'
-                  }}
-                >
-                  {w.word}
-                </span>
-              ))
+              wordFeedback.map((w, i) => {
+                let className = 'practice-word';
+                let bgColor = 'transparent';
+                let textColor = '#E2E8F0';
+                let decoration = 'none';
+                let weight = 'normal';
+                
+                if (w.status === 'correct') {
+                  className += ' word-correct';
+                  bgColor = 'rgba(76, 175, 80, 0.2)';
+                  textColor = '#4caf50';
+                  weight = '600';
+                } else if (w.status === 'article-error') {
+                  className += ' word-article-error';
+                  bgColor = 'rgba(59, 130, 246, 0.2)';
+                  textColor = '#3b82f6';
+                  weight = '600';
+                  decoration = 'underline dotted';
+                } else if (w.status === 'mispronounced') {
+                  className += ' word-mispronounced';
+                  bgColor = 'rgba(234, 88, 12, 0.2)';
+                  textColor = '#ea580c';
+                  weight = '600';
+                  decoration = 'underline wavy';
+                } else if (w.status === 'missed') {
+                  className += ' word-missed';
+                  bgColor = 'rgba(220, 38, 38, 0.2)';
+                  textColor = '#dc2626';
+                  weight = '600';
+                  decoration = 'line-through';
+                }
+                
+                return (
+                  <span
+                    key={i}
+                    className={className}
+                    style={{
+                      color: textColor,
+                      backgroundColor: bgColor,
+                      transition: 'all 0.3s ease',
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      fontWeight: weight,
+                      textDecoration: decoration
+                    }}
+                    title={w.status === 'article-error' ? `Should be "${w.word}", not "${w.spoken}"` : ''}
+                  >
+                    {w.word}
+                  </span>
+                );
+              })
             ) : (
               <div style={{ color: '#a0aec0' }}>
                 {loading ? "Loading PDF..." : "Extracting text..."}
@@ -639,16 +713,21 @@ const DocumentReader = ({
           </div>
 
           {practiceResult && (
-            <div className="practice-feedback fade-in" style={{ marginTop: '10px', padding: '10px', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: '6px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
+            <div className="practice-feedback fade-in" style={{ marginTop: '10px', padding: '12px', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: '6px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                 <span style={{ fontSize: '0.8rem', color: '#a0aec0' }}>Accuracy Score:</span>
                 <span style={{ fontWeight: 'bold', color: practiceResult.is_correct ? '#48BB78' : '#ED8936' }}>
                   {Math.round(practiceResult.score * 100)}%
                 </span>
               </div>
-              <p style={{ fontSize: '0.9rem', margin: 0, fontStyle: 'italic', color: '#fff' }}>
+              <p style={{ fontSize: '0.9rem', margin: '0 0 8px 0', fontStyle: 'italic', color: '#fff' }}>
                 {practiceResult.feedback}
               </p>
+              {!practiceResult.is_correct && (
+                <p style={{ fontSize: '0.85rem', margin: '8px 0 0 0', color: '#a0aec0' }}>
+                  💡 <strong>Tip:</strong> Take your time and focus on the highlighted words. You're doing great! 🌟
+                </p>
+              )}
             </div>
           )}
 
@@ -671,7 +750,32 @@ const DocumentReader = ({
                 {isRecording ? '⏹ Stop' : '🎤 Practice'}
               </button>
             </div>
-            <button onClick={handleNextSentence} className="btn btn-success" style={{ width: '100%', backgroundColor: '#48BB78' }}>Continue ➡</button>
+            {practiceResult && !practiceResult.is_correct && (
+              <button
+                onClick={() => {
+                  setRetryCount(prev => prev + 1);
+                  if (onRetry) onRetry();
+                }}
+                className="btn"
+                style={{ width: '100%', backgroundColor: '#3b82f6', color: 'white', fontWeight: 'bold', padding: '10px' }}
+              >
+                🔄 Try Again
+              </button>
+            )}
+            <button 
+              onClick={handleNextSentence} 
+              className="btn btn-success" 
+              style={{ width: '100%', backgroundColor: '#48BB78', opacity: practiceResult && !practiceResult.is_correct ? 0.5 : 1, cursor: practiceResult && !practiceResult.is_correct ? 'not-allowed' : 'pointer' }}
+              disabled={practiceResult && !practiceResult.is_correct ? true : activeSentenceIndex >= effectiveSentences.length - 1}
+              title={practiceResult && !practiceResult.is_correct ? "Practice this sentence until it's correct before moving on" : ""}
+            >
+              Continue ➡
+            </button>
+            {practiceResult && !practiceResult.is_correct && (
+              <p style={{ fontSize: '0.8rem', color: '#f87171', textAlign: 'center', marginTop: '8px', fontWeight: '500' }}>
+                ℹ️ Master this sentence first, then continue!
+              </p>
+            )}
           </div>
           {isRecording && <p style={{ color: '#ff5252', fontSize: '0.8rem', textAlign: 'center', marginTop: '5px' }}>Recording in progress...</p>}
         </div>

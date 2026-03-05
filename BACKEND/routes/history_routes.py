@@ -36,7 +36,7 @@ def get_history():
 @history_bp.route('', methods=['POST'])
 @jwt_required_custom
 def add_to_history():
-    """Add a PDF to user's viewing history"""
+    """Add a PDF/book to user's viewing history"""
     try:
         user_id = get_jwt_identity()
         data = request.get_json()
@@ -48,14 +48,24 @@ def add_to_history():
         if not pdf_name:
             return jsonify({'success': False, 'error': 'PDF name is required'}), 400
         
-        history_id = PdfHistory.add_to_history(
-            user_id=user_id,
-            pdf_name=pdf_name,
-            pdf_path=data.get('pdf_path'),
-            total_pages=data.get('total_pages', 0),
-            total_sentences=data.get('total_sentences', 0),
-            file_size=data.get('file_size', 0)
-        )
+        # Extract core fields
+        core_fields = {
+            'user_id': user_id,
+            'pdf_name': pdf_name,
+            'pdf_path': data.get('pdf_path'),
+            'total_pages': data.get('total_pages', 0),
+            'total_sentences': data.get('total_sentences', 0),
+            'file_size': data.get('file_size', 0)
+        }
+        
+        # Extract any additional metadata fields (for online books)
+        extra_fields = {}
+        for key, value in data.items():
+            if key not in core_fields and key != 'user_id':
+                extra_fields[key] = value
+        
+        # Add to history with core fields + extra metadata
+        history_id = PdfHistory.add_to_history(**core_fields, **extra_fields)
         
         return jsonify({
             'success': True,
@@ -138,3 +148,32 @@ def update_progress(history_id):
     except Exception as e:
         print(f"[ERROR] Update progress failed: {e}")
         return jsonify({'success': False, 'error': 'Failed to update progress'}), 500
+
+
+@history_bp.route('/cleanup/duplicates', methods=['POST'])
+@jwt_required_custom
+def cleanup_duplicates():
+    """Remove all duplicate entries from user's history
+    
+    Keeps only the most recent entry for each book
+    """
+    try:
+        user_id = get_jwt_identity()
+        
+        deleted_count = PdfHistory.cleanup_duplicates(user_id)
+        
+        return jsonify({
+            'success': True,
+            'message': f'Cleaned up {deleted_count} duplicate entries',
+            'deleted_count': deleted_count
+        }), 200
+        
+    except ConnectionError as e:
+        print(f"[ERROR] Database error: {e}")
+        return jsonify({
+            'success': False, 
+            'error': 'Database connection error. Please ensure MongoDB is running.'
+        }), 503
+    except Exception as e:
+        print(f"[ERROR] Cleanup failed: {e}")
+        return jsonify({'success': False, 'error': 'Failed to cleanup duplicates'}), 500

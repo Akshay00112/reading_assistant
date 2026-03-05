@@ -90,7 +90,7 @@ const ReadBooks = () => {
         <div className="App" style={{ backgroundColor: '#020617', minHeight: '100vh' }}>
             <div style={{ position: 'absolute', top: '20px', right: '20px', zIndex: 100, display: 'flex', alignItems: 'center', gap: '15px' }}>
                 <button
-                    onClick={() => navigate('/dashboard')}
+                    onClick={() => navigate(-1)}
                     style={{
                         background: 'rgba(255,255,255,0.1)',
                         border: '1px solid rgba(255,255,255,0.2)',

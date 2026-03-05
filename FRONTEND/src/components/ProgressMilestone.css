@@ -1,0 +1,375 @@
+/* Progress Milestone Animation Styles */
+
+.progress-milestone-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9998;
+  pointer-events: none;
+}
+
+/* Main Badge Container */
+.milestone-badge {
+  position: relative;
+  text-align: center;
+  animation: milestonePopInSmooth 0.9s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  z-index: 10;
+}
+
+@keyframes milestonePopInSmooth {
+  0% {
+    opacity: 0;
+    transform: scale(0.4) rotateX(90deg) rotateZ(10deg);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.08) rotateX(10deg) rotateZ(-3deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotateX(0deg) rotateZ(0deg);
+  }
+}
+
+/* Glow Effect */
+.trophy-glow {
+  position: absolute;
+  width: 400px;
+  height: 400px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(245, 158, 11, 0.4) 0%, transparent 70%);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  animation: trophyGlowSmooth 3s cubic-bezier(0.25, 0.46, 0.45, 0.94) infinite;
+  z-index: 1;
+}
+
+@keyframes trophyGlowSmooth {
+  0% {
+    box-shadow: 0 0 15px rgba(245, 158, 11, 0.5),
+                0 0 30px rgba(245, 158, 11, 0.2);
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(245, 158, 11, 0.7),
+                0 0 80px rgba(245, 158, 11, 0.3);
+    transform: translate(-50%, -50%) scale(1.1);
+  }
+  100% {
+    box-shadow: 0 0 15px rgba(245, 158, 11, 0.5),
+                0 0 30px rgba(245, 158, 11, 0.2);
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+/* Trophy Icon */
+.trophy-icon {
+  font-size: 4rem;
+  animation: trophyBounceSmooth 1s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  z-index: 15;
+  position: relative;
+}
+
+@keyframes trophyBounceSmooth {
+  0% {
+    transform: translateY(-50px) scale(0.4);
+  }
+  40% {
+    transform: translateY(8px) scale(1.1);
+  }
+  70% {
+    transform: translateY(-5px) scale(0.98);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Content Container */
+.milestone-content {
+  position: relative;
+  z-index: 15;
+  padding: 30px 40px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(168, 85, 247, 0.1));
+  backdrop-filter: blur(10px);
+  border-radius: 30px;
+  border: 2px solid rgba(245, 158, 11, 0.3);
+  margin-top: 20px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3),
+              inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.milestone-title {
+  font-size: 2.5rem;
+  background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-weight: 900;
+  margin: 0 0 10px 0;
+  animation: slideDown 0.7s ease-out;
+}
+
+.milestone-subtitle {
+  font-size: 1.3rem;
+  color: #6366f1;
+  margin: 0 0 25px 0;
+  font-weight: 600;
+  animation: slideDown 0.7s ease-out 0.1s both;
+}
+
+@keyframes slideDown {
+  from {
+    transform: translateY(-20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Accuracy Display */
+.accuracy-display {
+  margin: 25px 0;
+  animation: fadeIn 0.8s ease-out 0.2s both;
+}
+
+.accuracy-circle {
+  position: relative;
+  width: 150px;
+  height: 150px;
+  margin: 0 auto;
+}
+
+.accuracy-ring {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  transform: scaleX(-1) rotate(-90deg);
+  top: 0;
+  left: 0;
+}
+
+.ring-background {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.1);
+  stroke-width: 8;
+}
+
+.ring-progress {
+  fill: none;
+  stroke: url(#accuracyGradient);
+  stroke-width: 8;
+  stroke-dasharray: 282.7;
+  stroke-dashoffset: 282.7;
+  animation: fillAccuracyRing 2s ease-out forwards;
+  stroke-linecap: round;
+}
+
+@keyframes fillAccuracyRing {
+  to {
+    stroke-dashoffset: calc(282.7 * (1 - var(--percentage) / 100));
+  }
+}
+
+.accuracy-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+
+.accuracy-number {
+  display: block;
+  font-size: 2rem;
+  font-weight: 900;
+  background: linear-gradient(135deg, #f59e0b, #fbbf24);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.accuracy-label {
+  display: block;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.6);
+  margin-top: 4px;
+}
+
+/* Stats Row */
+.stats-row {
+  display: flex;
+  justify-content: center;
+  gap: 40px;
+  margin: 25px 0;
+  animation: fadeIn 0.8s ease-out 0.3s both;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  background: rgba(99, 102, 241, 0.1);
+  border-radius: 15px;
+  border: 1px solid rgba(99, 102, 241, 0.2);
+}
+
+.stat-icon {
+  font-size: 1.8rem;
+  animation: bounce 0.6s ease-out;
+}
+
+.stat-value {
+  font-size: 1.5rem;
+  font-weight: 900;
+  background: linear-gradient(135deg, #6366f1, #a855f7);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Congratulations Message */
+.congratulations-message {
+  font-size: 1.1rem;
+  color: #34d399;
+  margin: 20px 0 0 0;
+  font-weight: 600;
+  animation: fadeIn 0.8s ease-out 0.4s both;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Burst Particles */
+.milestone-particles {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.milestone-particle {
+  position: absolute;
+  font-size: 1.8rem;
+  animation: milestoneBurstSmooth 3s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+  top: 50%;
+  left: 50%;
+}
+
+@keyframes milestoneBurstSmooth {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, -50%) translateX(0) translateY(0) scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: 
+      translate(-50%, -50%)
+      translateX(calc(cos(var(--angle) * 3.14159 / 180) * 150px))
+      translateY(calc(sin(var(--angle) * 3.14159 / 180) * 150px))
+      scale(0.8);
+  }
+  100% {
+    opacity: 0;
+    transform: 
+      translate(-50%, -50%)
+      translateX(calc(cos(var(--angle) * 3.14159 / 180) * 280px))
+      translateY(calc(sin(var(--angle) * 3.14159 / 180) * 280px))
+      scale(0.2);
+  }
+}
+
+/* Confetti Popper Simulation */
+.milestone-confetti-popper {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+/* Bounce Animation */
+@keyframes bounce {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-15px) scale(1.1);
+  }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .trophy-icon {
+    font-size: 3rem;
+  }
+
+  .milestone-title {
+    font-size: 1.8rem;
+  }
+
+  .milestone-subtitle {
+    font-size: 1rem;
+  }
+
+  .milestone-content {
+    padding: 20px 25px;
+  }
+
+  .accuracy-circle {
+    width: 120px;
+    height: 120px;
+  }
+
+  .accuracy-number {
+    font-size: 1.5rem;
+  }
+
+  .stats-row {
+    gap: 20px;
+  }
+
+  .stat-item {
+    padding: 8px 12px;
+  }
+
+  .stat-icon {
+    font-size: 1.4rem;
+  }
+
+  .stat-value {
+    font-size: 1.2rem;
+  }
+
+  .congratulations-message {
+    font-size: 0.95rem;
+  }
+
+  .trophy-glow {
+    width: 280px;
+    height: 280px;
+  }
+
+  .milestone-particle {
+    font-size: 1.4rem;
+  }
+}

@@ -283,17 +283,17 @@ const LandingPage = () => {
           <div className="footer-section">
             <h4>Product</h4>
             <ul>
-              <li><a href="#features">Features</a></li>
-              <li><a href="#how-it-works">How It Works</a></li>
-              <li><a href="#pricing">Pricing</a></li>
+              <li><a href="#features" onClick={(e) => { e.preventDefault(); document.getElementById('features').scrollIntoView({ behavior: 'smooth' }); }}>Features</a></li>
+              <li><a href="#how-it-works" onClick={(e) => { e.preventDefault(); document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' }); }}>How It Works</a></li>
+              <li><a href="/" onClick={(e) => { e.preventDefault(); navigate('/pricing'); }}>Pricing</a></li>
             </ul>
           </div>
           <div className="footer-section">
             <h4>Company</h4>
             <ul>
-              <li><a href="#about">About Us</a></li>
-              <li><a href="#contact">Contact</a></li>
-              <li><a href="#terms">Terms of Service</a></li>
+              <li><a href="/" onClick={(e) => { e.preventDefault(); navigate('/about'); }}>About Us</a></li>
+              <li><a href="/" onClick={(e) => { e.preventDefault(); navigate('/contact'); }}>Contact</a></li>
+              <li><a href="/" onClick={(e) => { e.preventDefault(); navigate('/support'); }}>Support</a></li>
             </ul>
           </div>
         </div>

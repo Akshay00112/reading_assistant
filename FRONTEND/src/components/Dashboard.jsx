@@ -14,6 +14,28 @@ const Dashboard = () => {
 
     return (
         <div className="App" style={{ backgroundColor: '#020617', minHeight: '100vh' }}>
+            <div style={{ position: 'absolute', top: '20px', left: '20px', zIndex: 100 }}>
+                <button
+                    onClick={() => navigate(-1)}
+                    style={{
+                        background: 'rgba(255,255,255,0.1)',
+                        border: '1px solid rgba(255,255,255,0.2)',
+                        color: '#fff',
+                        padding: '8px 16px',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        transition: 'all 0.3s'
+                    }}
+                    onMouseEnter={(e) => {
+                        e.target.style.background = 'rgba(255,255,255,0.2)';
+                    }}
+                    onMouseLeave={(e) => {
+                        e.target.style.background = 'rgba(255,255,255,0.1)';
+                    }}
+                >
+                    ← Back
+                </button>
+            </div>
             <div style={{ position: 'absolute', top: '20px', right: '20px', zIndex: 100, display: 'flex', alignItems: 'center', gap: '15px' }}>
                 <span style={{ color: '#e5e7eb', fontWeight: '500' }}>{user?.name || 'User'}</span>
                 <button
